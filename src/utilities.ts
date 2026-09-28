@@ -1,4 +1,4 @@
-import type { RgbColor } from "./types.js";
+import type { RgbColor, MessageSnapshot } from "./types.js";
 import { DOCK_CLASS, RUNWAY_SELECTOR } from "./constants.js";
 
 export function normalizeText(value: string): string {
@@ -135,4 +135,35 @@ export function isMentionElement(element: Element): boolean {
     ariaLabel.startsWith("Mentioned ") ||
     element?.getAttribute?.("itemtype") === "http://schema.skype.com/Mention"
   );
+}
+
+// Groups consecutive messages from the same author (and same reply-status) under
+// a single heading. Only applied to the "selection" export scope — full chat
+// history keeps one heading per message so timestamps stay granular for auditing.
+export function groupConsecutiveMessages(
+  messages: MessageSnapshot[],
+  scope?: string
+): MessageSnapshot[][] {
+  if (scope === "full-chat") {
+    return messages.map((message) => [message]);
+  }
+
+  const groups: MessageSnapshot[][] = [];
+
+  messages.forEach((message) => {
+    const lastGroup = groups[groups.length - 1];
+    const lastMessage = lastGroup?.[lastGroup.length - 1];
+
+    if (
+      lastMessage &&
+      lastMessage.author === message.author &&
+      Boolean(lastMessage.isReply) === Boolean(message.isReply)
+    ) {
+      lastGroup.push(message);
+    } else {
+      groups.push([message]);
+    }
+  });
+
+  return groups;
 }

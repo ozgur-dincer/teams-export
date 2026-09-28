@@ -1,5 +1,5 @@
 import type { QuotedReply, ReactionInfo, MessageSnapshot, ExportOptions, LinkContext } from "./types.js";
-import { escapeHtml } from "./utilities.js";
+import { escapeHtml, groupConsecutiveMessages } from "./utilities.js";
 import { formatQuotedReplyLabel } from "./markdown-renderer.js";
 import { buildConversationLink, buildMessageLink } from "./link-builder.js";
 
@@ -52,24 +52,36 @@ export function renderHtmlDocument(
     ? `\n        <p><a href="${escapeHtml(buildConversationLink(meta.linkContext))}" class="teams-link">Open in Teams ↗</a></p>`
     : "";
 
-  const articles = messages
-    .map((message) => {
-      const safeAuthor = escapeHtml(message.author);
-      const safeTime = escapeHtml(message.timeLabel || message.dateTime || "");
-      const quoteHtml = renderQuotedReplyHtml(message.quote);
-      const reactionsHtml = renderReactionsHtml(message.reactions);
-      const subjectHtml = message.subject ? `<h3>${escapeHtml(message.subject)}</h3>` : "";
-      const replyClass = message.isReply ? " thread-reply" : "";
-      const messageLinkHtml = includeLinks && meta.linkContext
-        ? ` <a href="${escapeHtml(buildMessageLink(meta.linkContext, message))}" class="message-link" title="Open in Teams">↗</a>`
+  const articles = groupConsecutiveMessages(messages, scope)
+    .map((group) => {
+      const [firstMessage] = group;
+      const safeAuthor = escapeHtml(firstMessage.author);
+      const safeTime = escapeHtml(firstMessage.timeLabel || firstMessage.dateTime || "");
+      const replyClass = firstMessage.isReply ? " thread-reply" : "";
+      const headerLinkHtml = includeLinks && meta.linkContext
+        ? ` <a href="${escapeHtml(buildMessageLink(meta.linkContext, firstMessage))}" class="message-link" title="Open in Teams">↗</a>`
         : "";
+
+      const sections = group
+        .map((message, index) => {
+          const quoteHtml = renderQuotedReplyHtml(message.quote);
+          const reactionsHtml = renderReactionsHtml(message.reactions);
+          const subjectHtml = message.subject ? `<h3>${escapeHtml(message.subject)}</h3>` : "";
+          const sectionLinkHtml =
+            index > 0 && includeLinks && meta.linkContext
+              ? ` <a href="${escapeHtml(buildMessageLink(meta.linkContext, message))}" class="message-link" title="Open in Teams">↗</a>`
+              : "";
+          return `<section class="body">${subjectHtml}${quoteHtml}${message.html || `<p>${escapeHtml(message.plainText)}</p>`}${reactionsHtml}${sectionLinkHtml}</section>`;
+        })
+        .join("\n");
+
       return `
           <article class="message${replyClass}">
             <header>
-              <strong>${message.isReply ? "↳ " : ""}${safeAuthor}${messageLinkHtml}</strong>
-              <time datetime="${escapeHtml(message.dateTime || "")}">${safeTime}</time>
+              <strong>${firstMessage.isReply ? "↳ " : ""}${safeAuthor}${headerLinkHtml}</strong>
+              <time datetime="${escapeHtml(firstMessage.dateTime || "")}">${safeTime}</time>
             </header>
-            <section class="body">${subjectHtml}${quoteHtml}${message.html || `<p>${escapeHtml(message.plainText)}</p>`}${reactionsHtml}</section>
+            ${sections}
           </article>
         `;
     })

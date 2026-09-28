@@ -198,3 +198,96 @@ describe("renderMarkdown thread reply formatting", () => {
     assert.ok(!result.includes("### ↳"));
   });
 });
+
+describe("renderMarkdown consecutive message merging", () => {
+  const selectionMeta = {
+    title: "Test Chat",
+    sourceUrl: "https://teams.cloud.microsoft/",
+    exportedAt: "2026-03-19",
+    scope: "selection"
+  };
+
+  const fullChatMeta = { ...selectionMeta, scope: "full-chat" };
+
+  function makeMessage(overrides: Partial<import("../../src/types.js").MessageSnapshot> = {}): import("../../src/types.js").MessageSnapshot {
+    return {
+      id: "1",
+      index: 0,
+      author: "Alice",
+      timeLabel: "1:00 PM",
+      dateTime: "2026-03-19T01:00:00.000Z",
+      subject: "",
+      quote: null,
+      reactions: [],
+      html: "<p>Hello</p>",
+      markdown: "Hello",
+      plainText: "Hello",
+      ...overrides
+    };
+  }
+
+  it("merges consecutive messages from the same author under one heading", () => {
+    const result = renderMarkdown(
+      [
+        makeMessage({ id: "1", author: "Edgar", timeLabel: "1:33 PM", markdown: "hmmm" }),
+        makeMessage({ id: "2", author: "Edgar", timeLabel: "1:34 PM", markdown: "second message" }),
+        makeMessage({ id: "3", author: "Ozgur", timeLabel: "1:34 PM", markdown: "reply" })
+      ],
+      selectionMeta
+    );
+
+    const headingMatches = result.match(/^## /gm) || [];
+    assert.equal(headingMatches.length, 2);
+    assert.ok(result.includes("## Edgar | 1:33 PM"));
+    assert.ok(result.includes("hmmm"));
+    assert.ok(result.includes("second message"));
+    assert.ok(result.includes("## Ozgur | 1:34 PM"));
+  });
+
+  it("does not merge messages across a different author", () => {
+    const result = renderMarkdown(
+      [
+        makeMessage({ id: "1", author: "Edgar", markdown: "first" }),
+        makeMessage({ id: "2", author: "Ozgur", markdown: "second" }),
+        makeMessage({ id: "3", author: "Edgar", markdown: "third" })
+      ],
+      selectionMeta
+    );
+
+    const headingMatches = result.match(/^## /gm) || [];
+    assert.equal(headingMatches.length, 3);
+  });
+
+  it("does not merge messages for full-chat scope", () => {
+    const result = renderMarkdown(
+      [
+        makeMessage({ id: "1", author: "Edgar", markdown: "first" }),
+        makeMessage({ id: "2", author: "Edgar", markdown: "second" })
+      ],
+      fullChatMeta
+    );
+
+    const headingMatches = result.match(/^## /gm) || [];
+    assert.equal(headingMatches.length, 2);
+  });
+
+  it("keeps each message's own quote and reactions within a merged group", () => {
+    const result = renderMarkdown(
+      [
+        makeMessage({ id: "1", author: "Edgar", markdown: "first message" }),
+        makeMessage({
+          id: "2",
+          author: "Edgar",
+          markdown: "but thats a killer",
+          reactions: [{ emoji: "😢", name: "Crying", count: 1, actors: [] }]
+        })
+      ],
+      selectionMeta
+    );
+
+    const headingMatches = result.match(/^## /gm) || [];
+    assert.equal(headingMatches.length, 1);
+    assert.ok(result.includes("but thats a killer"));
+    assert.ok(result.includes("Reactions: 😢 Crying x1"));
+  });
+});

@@ -1,5 +1,5 @@
 import type { Strategy, QuotedReply, ReactionInfo, MessageSnapshot, ExportOptions, LinkContext } from "./types.js";
-import { normalizeText, inlineMarkdown, isMentionElement } from "./utilities.js";
+import { normalizeText, inlineMarkdown, isMentionElement, groupConsecutiveMessages } from "./utilities.js";
 import {
   formatMentionLabel,
   isEmojiImage,
@@ -202,40 +202,53 @@ export function renderMarkdown(
 
   lines.push(`- ${countLabel}`, "");
 
-  messages.forEach((message) => {
-    const headingBits = [message.author];
-    if (message.timeLabel || message.dateTime) {
-      headingBits.push(message.timeLabel || message.dateTime);
+  const groups = groupConsecutiveMessages(messages, scope);
+
+  groups.forEach((group) => {
+    const [firstMessage] = group;
+    const headingBits = [firstMessage.author];
+    if (firstMessage.timeLabel || firstMessage.dateTime) {
+      headingBits.push(firstMessage.timeLabel || firstMessage.dateTime);
     }
 
     const headingText = headingBits.join(" | ");
-    let linkSuffix = "";
+    let headingLinkSuffix = "";
     if (includeLinks && meta.linkContext) {
-      const messageLink = buildMessageLink(meta.linkContext, message);
-      linkSuffix = ` [↗](${messageLink})`;
+      const messageLink = buildMessageLink(meta.linkContext, firstMessage);
+      headingLinkSuffix = ` [↗](${messageLink})`;
     }
 
-    if (message.isReply) {
+    if (firstMessage.isReply) {
       // Thread reply: use h3 with reply prefix
-      lines.push(`### ↳ ${headingText}${linkSuffix}`);
+      lines.push(`### ↳ ${headingText}${headingLinkSuffix}`);
     } else {
-      lines.push(`## ${headingText}${linkSuffix}`);
+      lines.push(`## ${headingText}${headingLinkSuffix}`);
     }
     lines.push("");
-    if (message.subject) {
-      lines.push(`**${message.subject}**`);
+
+    group.forEach((message, index) => {
+      if (message.subject) {
+        lines.push(`**${message.subject}**`);
+        lines.push("");
+      }
+      if (message.quote?.text) {
+        lines.push(renderQuotedReplyMarkdown(message.quote));
+        lines.push("");
+      }
+
+      const bodyText = message.markdown || message.plainText;
+      const bodyLinkSuffix =
+        index > 0 && includeLinks && meta.linkContext
+          ? ` [↗](${buildMessageLink(meta.linkContext, message)})`
+          : "";
+      lines.push(`${bodyText}${bodyLinkSuffix}`);
+
+      if (message.reactions?.length) {
+        lines.push("");
+        lines.push(renderReactionsMarkdown(message.reactions));
+      }
       lines.push("");
-    }
-    if (message.quote?.text) {
-      lines.push(renderQuotedReplyMarkdown(message.quote));
-      lines.push("");
-    }
-    lines.push(message.markdown || message.plainText);
-    if (message.reactions?.length) {
-      lines.push("");
-      lines.push(renderReactionsMarkdown(message.reactions));
-    }
-    lines.push("");
+    });
   });
 
   return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n";
