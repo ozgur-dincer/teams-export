@@ -15,6 +15,7 @@
 
 interface RegisteredImageAsset {
   id: string;
+  fileStem: string;
   localPath: string;
   blobPromise: Promise<Blob | null>;
 }
@@ -54,8 +55,12 @@ export function registerImageAsset(src: string): RegisteredImageAsset {
   // the reference baked into html/markdown at scan time consistent with the
   // file we ultimately place in the zip, without needing to know the real
   // MIME type up front (only known once the async fetch resolves).
-  const localPath = `images/image-${id}.png`;
-  const asset: RegisteredImageAsset = { id, localPath, blobPromise: fetchImageBlob(src) };
+  // "image_N" (underscore) doubles as the markdown alt text, so the bare
+  // filename can be copy-pasted straight out of the exported text when
+  // saving a full-resolution copy of the image under a matching name.
+  const fileStem = `image_${id}`;
+  const localPath = `images/${fileStem}.png`;
+  const asset: RegisteredImageAsset = { id, fileStem, localPath, blobPromise: fetchImageBlob(src) };
   assetsBySrc.set(src, asset);
   return asset;
 }

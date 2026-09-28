@@ -134,7 +134,10 @@ export function normalizeContentClone(root: HTMLElement, imageIds?: Set<string>)
       // a real (bogus) network request; extractBodyHtml() rewrites it to a
       // real "src" only in the final serialized HTML string.
       replacement.setAttribute("data-tsm-image-src", asset.localPath);
-      replacement.setAttribute("alt", element.getAttribute("alt") || "Image");
+      // Alt text mirrors the zip filename stem (not the original alt text) so
+      // the bare filename can be copy-pasted straight out of the exported
+      // markdown/html when saving a full-resolution copy under a matching name.
+      replacement.setAttribute("alt", asset.fileStem);
       element.replaceWith(replacement);
       return;
     }

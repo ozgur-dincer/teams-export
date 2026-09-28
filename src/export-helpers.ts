@@ -75,7 +75,7 @@ export async function writeClipboardText(text: string): Promise<boolean> {
  * are converted back to the plain "[Image omitted]" placeholder.
  */
 export function stripEmbeddedImageLinks(markdown: string): string {
-  return markdown.replace(/!\[[^\]]*\]\(images\/image-[^)]+\.png\)/g, "[Image omitted]");
+  return markdown.replace(/!\[[^\]]*\]\(images\/image_[^)]+\.png\)/g, "[Image omitted]");
 }
 
 export function createExportPayload(
