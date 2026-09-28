@@ -1,4 +1,4 @@
-import type { ExporterState, ExporterCallbacks, MessageRecord, ExportFullHistoryResult } from "./types.js";
+import type { ExporterState, ExporterCallbacks, MessageRecord, ExportFullHistoryResult, ExportPayload } from "./types.js";
 
 export const state: ExporterState = {
   active: false,
@@ -47,7 +47,7 @@ export const callbacks: ExporterCallbacks = {
   setActive: () => {},
   setPanelOpen: () => {},
   clearSelection: () => {},
-  exportSelection: () => null,
+  exportSelection: () => Promise.resolve(null as ExportPayload | null),
   exportFullHistory: () => Promise.resolve(null as ExportFullHistoryResult | null),
   copyMarkdown: () => Promise.resolve(false),
   toggleSelection: () => {}

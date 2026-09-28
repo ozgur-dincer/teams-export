@@ -1,6 +1,7 @@
 import type { Strategy, QuotedReply, ReactionInfo, TimeMeta } from "./types.js";
 import { CONTENT_PRUNE_SELECTOR } from "./constants.js";
 import { normalizeText, isMentionElement } from "./utilities.js";
+import { registerImageAsset } from "./image-assets.js";
 
 function getFullMentionName(element: Element): string {
   // First, check if this mention is part of a wrapper (like <a> or <span>) that contains the full name
@@ -99,7 +100,7 @@ export function getContentSource(element: HTMLElement, strategy: Strategy | null
   return ((strategy?.contentSelector && element.querySelector(strategy.contentSelector)) as HTMLElement) || element;
 }
 
-export function normalizeContentClone(root: HTMLElement): HTMLElement {
+export function normalizeContentClone(root: HTMLElement, imageIds?: Set<string>): HTMLElement {
   root.querySelectorAll("*").forEach((element) => {
     if (isMentionElement(element)) {
       const replacement = document.createElement("span");
@@ -124,20 +125,38 @@ export function normalizeContentClone(root: HTMLElement): HTMLElement {
       return;
     }
 
+    const src = element.getAttribute("src") || "";
+    if (src) {
+      const asset = registerImageAsset(src);
+      imageIds?.add(asset.id);
+      const replacement = document.createElement("img");
+      // Use a non-"src" attribute so this detached placeholder never triggers
+      // a real (bogus) network request; extractBodyHtml() rewrites it to a
+      // real "src" only in the final serialized HTML string.
+      replacement.setAttribute("data-tsm-image-src", asset.localPath);
+      replacement.setAttribute("alt", element.getAttribute("alt") || "Image");
+      element.replaceWith(replacement);
+      return;
+    }
+
     element.replaceWith(createImagePlaceholder("[Image omitted]"));
   });
 
   return root;
 }
 
-export function getPreparedContentClone(element: HTMLElement, strategy: Strategy | null): HTMLElement {
+export function getPreparedContentClone(
+  element: HTMLElement,
+  strategy: Strategy | null,
+  imageIds?: Set<string>
+): HTMLElement {
   const clone = pruneClone(getContentSource(element, strategy).cloneNode(true) as HTMLElement);
-  return normalizeContentClone(clone);
+  return normalizeContentClone(clone, imageIds);
 }
 
-export function extractBodyHtml(element: HTMLElement, strategy: Strategy | null): string {
-  const clone = getPreparedContentClone(element, strategy);
-  return clone.innerHTML.trim();
+export function extractBodyHtml(element: HTMLElement, strategy: Strategy | null, imageIds?: Set<string>): string {
+  const clone = getPreparedContentClone(element, strategy, imageIds);
+  return clone.innerHTML.trim().replace(/\sdata-tsm-image-src="/g, ' src="');
 }
 
 export function extractPlainText(element: HTMLElement, strategy: Strategy | null): string {

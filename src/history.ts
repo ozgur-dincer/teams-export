@@ -492,8 +492,9 @@ export async function exportFullHistory(
     );
     const { buildLinkContext } = await import("./link-builder.js");
     const linkContext = state.exportOptions?.includeLinks ? buildLinkContext() : null;
-    const payload = commitExportPayload(
+    const payload = await commitExportPayload(
       createExportPayload(format, messages, { scope: "full-chat" }, state.exportOptions, linkContext),
+      messages,
       options
     );
     state.lastExport = payload;

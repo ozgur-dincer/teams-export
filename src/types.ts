@@ -69,6 +69,8 @@ export interface MessageRecord {
   plainText: string;
   threadId?: string;
   isReply?: boolean;
+  /** IDs of images referenced by this message's html/markdown (see image-assets.ts). */
+  images?: string[];
 }
 
 export interface MessageSnapshot {
@@ -88,6 +90,8 @@ export interface MessageSnapshot {
   threadId?: string;
   /** True when this message is a reply within a thread (not the root post). */
   isReply?: boolean;
+  /** IDs of images referenced by this message's html/markdown (see image-assets.ts). */
+  images?: string[];
 }
 
 export interface ExportPayload {
@@ -180,7 +184,7 @@ export interface ExporterCallbacks {
   setActive(active: boolean): void;
   setPanelOpen(open: boolean): void;
   clearSelection(): void;
-  exportSelection(format: string): ExportPayload | null;
+  exportSelection(format: string): Promise<ExportPayload | null>;
   exportFullHistory(format: string): Promise<ExportFullHistoryResult | null>;
   copyMarkdown(): Promise<boolean>;
   toggleSelection(messageId: string, options?: ToggleSelectionOptions): void;

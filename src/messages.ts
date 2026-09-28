@@ -113,6 +113,7 @@ export function buildMessageRecord(
   const domReactions = isChannelPost(element) ? extractPostReactions(element) : extractReactions(element);
 
   const threadInfo = extractThreadInfo(element, messageId);
+  const imageIds = new Set<string>();
 
   return {
     id: messageId,
@@ -124,9 +125,10 @@ export function buildMessageRecord(
     subject: extractSubject(element),
     quote: extractQuotedReply(element),
     reactions: enrichReactionsFromWorker(messageId, domReactions),
-    html: extractBodyHtml(element, strategy),
-    markdown: elementToMarkdown(element, strategy, plainText),
+    html: extractBodyHtml(element, strategy, imageIds),
+    markdown: elementToMarkdown(element, strategy, plainText, imageIds),
     plainText,
+    images: Array.from(imageIds),
     ...threadInfo
   };
 }

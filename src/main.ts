@@ -19,7 +19,8 @@ import { getMessageRange } from "./selection.js";
 import {
   createExportPayload,
   commitExportPayload,
-  writeClipboardText
+  writeClipboardText,
+  stripEmbeddedImageLinks
 } from "./export-helpers.js";
 import { harvestFullChatMessages, exportFullHistory } from "./history.js";
 import {
@@ -350,19 +351,21 @@ function getSelectedMessages(): MessageRecord[] {
   return state.messages.filter((message) => state.selectedIds.has(message.id));
 }
 
-function exportSelection(format: string): ExportPayload | null {
+function exportSelection(format: string): Promise<ExportPayload | null> {
   const messages = getSelectedMessages().map(snapshotMessageRecord);
   if (!messages.length) {
     log("No selected messages to export.");
-    return null;
+    return Promise.resolve(null);
   }
 
   const linkContext = state.exportOptions.includeLinks ? buildLinkContext() : null;
-  const payload = commitExportPayload(
-    createExportPayload(format, messages, { scope: "selection" }, state.exportOptions, linkContext)
-  );
-  state.lastExport = payload;
-  return payload;
+  return commitExportPayload(
+    createExportPayload(format, messages, { scope: "selection" }, state.exportOptions, linkContext),
+    messages
+  ).then((payload) => {
+    state.lastExport = payload;
+    return payload;
+  });
 }
 
 async function copyMarkdown(): Promise<boolean> {
@@ -372,14 +375,16 @@ async function copyMarkdown(): Promise<boolean> {
   }
 
   const linkContext = state.exportOptions.includeLinks ? buildLinkContext() : null;
-  const markdown = renderMarkdown(messages, {
-    title: getConversationTitle(),
-    sourceUrl: location.href,
-    exportedAt: new Date().toISOString(),
-    scope: "selection",
-    options: state.exportOptions,
-    linkContext
-  });
+  const markdown = stripEmbeddedImageLinks(
+    renderMarkdown(messages, {
+      title: getConversationTitle(),
+      sourceUrl: location.href,
+      exportedAt: new Date().toISOString(),
+      scope: "selection",
+      options: state.exportOptions,
+      linkContext
+    })
+  );
   await writeClipboardText(markdown);
   state.lastExport = {
     format: "clipboard-md",
@@ -470,8 +475,18 @@ function start(): void {
     ensureStyles();
     const elements = createToolbar({
       onClear: clearSelection,
-      onExportHtml: () => exportSelection("html"),
-      onExportMarkdown: () => exportSelection("md"),
+      onExportHtml: () => {
+        exportSelection("html").catch((error) => {
+          log("Unable to export the selection.", error);
+          setBusy(false);
+        });
+      },
+      onExportMarkdown: () => {
+        exportSelection("md").catch((error) => {
+          log("Unable to export the selection.", error);
+          setBusy(false);
+        });
+      },
       onExportFullMarkdown: () => {
         exportFullHistory("md").catch((error) => {
           log("Unable to export the full chat history.", error);

@@ -74,6 +74,12 @@ function nodeToMarkdown(node: Node, context: Record<string, unknown> = {}): stri
   }
 
   if (tag === "img") {
+    const localImageSrc = element.getAttribute("data-tsm-image-src");
+    if (localImageSrc) {
+      const altText = normalizeText(element.getAttribute("alt") || "Image");
+      return `![${altText}](${localImageSrc})`;
+    }
+
     if (isEmojiImage(element)) {
       return element.getAttribute("alt") || "";
     }
@@ -160,13 +166,14 @@ function mergeConsecutiveMentions(markdown: string): string {
 export function elementToMarkdown(
   element: HTMLElement,
   strategy: Strategy | null,
-  fallbackText: string
+  fallbackText: string,
+  imageIds?: Set<string>
 ): string {
   if (!element) {
     return fallbackText;
   }
 
-  const clone = getPreparedContentClone(element, strategy);
+  const clone = getPreparedContentClone(element, strategy, imageIds);
   const markdown = Array.from(clone.childNodes)
     .map((node) => nodeToMarkdown(node))
     .join("")

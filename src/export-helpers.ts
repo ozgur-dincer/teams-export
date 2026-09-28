@@ -4,6 +4,8 @@ import { renderMarkdown } from "./markdown-renderer.js";
 import { renderHtmlDocument } from "./html-renderer.js";
 import { getConversationTitle } from "./conversation.js";
 import { formatLocalDateTime } from "./utilities.js";
+import { resolveImageAssets } from "./image-assets.js";
+import { buildZip } from "./zip-writer.js";
 
 export function getExportMessageCountLabel(count: number, scope: string): string {
   if (scope === "full-chat") {
@@ -25,8 +27,7 @@ export function getExportScopeSuffix(scope: string): string {
   return scope === "full-chat" ? "-full-chat" : "";
 }
 
-export function triggerDownload(filename: string, mimeType: string, content: string): void {
-  const blob = new Blob([content], { type: mimeType });
+export function triggerDownloadBlob(filename: string, blob: Blob): void {
   const objectUrl = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = objectUrl;
@@ -35,6 +36,10 @@ export function triggerDownload(filename: string, mimeType: string, content: str
   anchor.click();
   anchor.remove();
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 2_000);
+}
+
+export function triggerDownload(filename: string, mimeType: string, content: string): void {
+  triggerDownloadBlob(filename, new Blob([content], { type: mimeType }));
 }
 
 export async function writeClipboardText(text: string): Promise<boolean> {
@@ -62,6 +67,15 @@ export async function writeClipboardText(text: string): Promise<boolean> {
 
     return true;
   }
+}
+
+/**
+ * Clipboard copies never bundle a zip of images alongside them, so any
+ * embedded image markdown links (which only resolve inside an export zip)
+ * are converted back to the plain "[Image omitted]" placeholder.
+ */
+export function stripEmbeddedImageLinks(markdown: string): string {
+  return markdown.replace(/!\[[^\]]*\]\(images\/image-[^)]+\.png\)/g, "[Image omitted]");
 }
 
 export function createExportPayload(
@@ -100,17 +114,53 @@ export function createExportPayload(
   };
 }
 
-export function commitExportPayload(
+function collectImageIds(messages: MessageSnapshot[]): Set<string> {
+  const imageIds = new Set<string>();
+  messages.forEach((message) => {
+    message.images?.forEach((id) => imageIds.add(id));
+  });
+  return imageIds;
+}
+
+/**
+ * Commits an export payload to a download. When the source messages reference
+ * any captured images (selection-mode export only — see image-assets.ts),
+ * this bundles the html/markdown file together with an "images/" folder into
+ * a single .zip instead of downloading the text file on its own.
+ */
+export async function commitExportPayload(
   payload: ExportPayload,
+  messages: MessageSnapshot[],
   options: { download?: boolean } = {}
-): ExportPayload {
-  if (options.download !== false) {
+): Promise<ExportPayload> {
+  if (options.download === false) {
+    return payload;
+  }
+
+  const imageIds = collectImageIds(messages);
+
+  if (imageIds.size === 0) {
     triggerDownload(
       payload.filename,
       payload.format === "html" ? "text/html;charset=utf-8" : "text/markdown;charset=utf-8",
       payload.content
     );
+    return payload;
   }
+
+  const resolvedAssets = await resolveImageAssets(imageIds);
+  const zipEntries = [
+    { name: payload.filename, data: new TextEncoder().encode(payload.content) },
+    ...(await Promise.all(
+      resolvedAssets.map(async (asset) => ({
+        name: asset.localPath,
+        data: new Uint8Array(await asset.blob.arrayBuffer())
+      }))
+    ))
+  ];
+
+  const zipFilename = payload.filename.replace(/\.(html|md)$/i, ".zip");
+  triggerDownloadBlob(zipFilename, buildZip(zipEntries));
 
   return payload;
 }
